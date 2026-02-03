@@ -51,27 +51,20 @@ jobs:
         run: |
           ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "bash -lc '
             set -euo pipefail
-          
+
             cd ~/benchmark
-            
-            # Always start from a known-good state
+
+            # Ensure main is up to date
             git switch main || git checkout main
             git fetch origin
             git pull --ff-only origin main
-            
-            # Ensure we can fetch the PR branch even if it comes from a fork
-            if git remote get-url pr >/dev/null 2>&1; then
-              git remote set-url pr \"$REMOTE_URL\"
-            else
-              git remote add pr \"$REMOTE_URL\"
-            fi
-            
-            # Refresh remote refs and force local branch to match the remote branch
-            git fetch --prune pr
-            
-            git branch -D \"$BRANCH\" 2>/dev/null || true
-            git checkout -B \"$BRANCH\" \"pr/$BRANCH\"
-          '"
+
+            # For pull requests, fetch the PR head ref from origin (works for forks too)
+            PR_NUMBER=\"${{ github.event.pull_request.number }}\"
+            BRANCH=\"pr-${{ github.event.pull_request.number }}\"
+
+            git fetch --prune origin \"refs/pull/${PR_NUMBER}/head:${BRANCH}\"
+            git switch \"${BRANCH}\" || git checkout \"${BRANCH}\"
 
       - name: Run benchmark
         run: |
