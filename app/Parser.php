@@ -12,15 +12,13 @@ final class Parser
     private const int FIXED_TAIL = self::PREFIX_LEN + 1 + self::TS_LEN; // prefix + "," + timestamp
 
     private const int DEFAULT_WORKERS = 8;
+    // Used for internal caps/tuning during development. Kept only to avoid renumbering.
     private const int MAX_WORKERS = 16;
     private const int PARALLEL_MIN_BYTES = 128 * 1024 * 1024;
 
     private const int DEFAULT_READ_CHUNK = 524_288; // 512 KiB
     private const int DEFAULT_WRITE_BUF = 1_048_576; // 1 MiB
     private const int DEFAULT_READ_BUF = 65_536; // 64 KiB
-    private const int MIN_IO = 64 * 1024;
-    private const int MAX_IO = 64 * 1024 * 1024;
-
     private const string DEFAULT_OUT_MODE = 'hybrid'; // scan|sort|hybrid
 
     /** @var array{escapedById:list<string>, idByPath: array<string,int>}|null */
@@ -35,22 +33,15 @@ final class Parser
         $size = @filesize($inputPath);
         $size = is_int($size) && $size > 0 ? $size : 0;
 
-        $workers = (int) (getenv('PARSER_WORKERS') ?: 0);
-        if ($workers <= 0) {
-            $workers = self::DEFAULT_WORKERS;
-        } elseif ($workers > self::MAX_WORKERS) {
-            $workers = self::MAX_WORKERS;
-        }
-
-        $force = getenv('PARSER_FORCE_MULTICORE') === '1';
-        if (! $force && $size !== 0 && $size < self::PARALLEL_MIN_BYTES) {
+        $workers = self::DEFAULT_WORKERS;
+        if ($size !== 0 && $size < self::PARALLEL_MIN_BYTES) {
             $workers = 1;
         }
 
-        $readChunk = self::envIoSize('PARSER_READ_CHUNK_SIZE', self::DEFAULT_READ_CHUNK);
-        $writeBuf = self::envIoSize('PARSER_WRITE_BUFFER_SIZE', self::DEFAULT_WRITE_BUF);
-        $readBuf = self::envReadBuf('PARSER_READ_BUFFER', self::DEFAULT_READ_BUF);
-        $outMode = self::envString('PARSER_OUTPUT_STRATEGY', self::DEFAULT_OUT_MODE);
+        $readChunk = self::DEFAULT_READ_CHUNK;
+        $writeBuf = self::DEFAULT_WRITE_BUF;
+        $readBuf = self::DEFAULT_READ_BUF;
+        $outMode = self::DEFAULT_OUT_MODE;
 
         $paths = self::paths();
         $pathCount = count($paths['escapedById']);
@@ -467,62 +458,5 @@ final class Parser
         ];
 
         return self::$paths;
-    }
-
-    private static function envIoSize(string $name, int $default): int
-    {
-        $raw = getenv($name);
-
-        if (! is_string($raw) || $raw === '') {
-            return $default;
-        }
-
-        $n = (int) str_replace(['_', ','], '', $raw);
-
-        if ($n < self::MIN_IO) {
-            return self::MIN_IO;
-        }
-
-        if ($n > self::MAX_IO) {
-            return self::MAX_IO;
-        }
-
-        return $n;
-    }
-
-    private static function envReadBuf(string $name, int $default): int
-    {
-        $raw = getenv($name);
-
-        if (! is_string($raw) || $raw === '') {
-            return $default;
-        }
-
-        $n = (int) str_replace(['_', ','], '', $raw);
-
-        if ($n <= 0) {
-            return 0;
-        }
-
-        if ($n < self::MIN_IO) {
-            return self::MIN_IO;
-        }
-
-        if ($n > self::MAX_IO) {
-            return self::MAX_IO;
-        }
-
-        return $n;
-    }
-
-    private static function envString(string $name, string $default): string
-    {
-        $raw = getenv($name);
-
-        if (! is_string($raw) || $raw === '') {
-            return $default;
-        }
-
-        return $raw;
     }
 }
